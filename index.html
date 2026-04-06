@@ -365,7 +365,36 @@
     </div>
 
     <script>
-        const API_BASE = 'http://localhost:5000/api';
+        // 线上部署时，把这个值改成你的后端域名，例如：
+        // https://your-backend.onrender.com/api
+        const DEPLOY_API_BASE = '';
+
+        function normalizeApiBase(base) {
+            return (base || '').trim().replace(/\/+$/, '');
+        }
+
+        function resolveApiBase() {
+            const queryApiBase = new URLSearchParams(window.location.search).get('apiBase');
+            const fromQuery = normalizeApiBase(queryApiBase);
+            if (fromQuery) return fromQuery;
+
+            const fromConfig = normalizeApiBase(DEPLOY_API_BASE);
+            const hostname = window.location.hostname;
+            const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+
+            if (isLocal) {
+                return 'http://localhost:5000/api';
+            }
+
+            if (fromConfig) {
+                return fromConfig;
+            }
+
+            // 如果前后端同域并通过反向代理转发 /api，可直接使用当前域名
+            return `${window.location.origin}/api`;
+        }
+
+        const API_BASE = resolveApiBase();
         const API_TIMEOUT = 300000; // 5 minutes
         const STAGE_DEFS = [
             { key: 'brief', label: 'PM Brief' },
@@ -404,6 +433,10 @@ Error: ${error.message}
 1. Terminal 1: python app_api.py
 2. Terminal 2: python -m http.server 8000
 3. Browser: http://localhost:8000/index.html
+
+For deployment:
+- Set DEPLOY_API_BASE in index.html
+- Or use query string: ?apiBase=https://your-backend.onrender.com/api
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             `;
             return diagnostics;
@@ -415,7 +448,8 @@ Error: ${error.message}
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 5000);
                 
-                const response = await fetch(`${API_BASE.replace('/api', '')}/health`, {
+                const apiOrigin = new URL(API_BASE).origin;
+                const response = await fetch(`${apiOrigin}/health`, {
                     method: 'GET',
                     signal: controller.signal,
                     headers: {
