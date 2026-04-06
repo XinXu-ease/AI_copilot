@@ -13,11 +13,11 @@ class Settings:
             "LITELLM_BASE_URL",
             "https://litellm.oit.duke.edu/v1",
         )
-        self.LITELLM_MODEL = os.getenv("LITELLM_MODEL") or "gpt-3.5-turbo"
+        self.LITELLM_MODEL = os.getenv("LITELLM_MODEL", "GPT 4.1 Mini")
 
         self.LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60"))
         self.LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.2"))
-        self.LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "2000"))
+        self.LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "4000"))
 
         # SQLite数据库配置
         db_path = Path(__file__).parent.parent.parent / "app.db"

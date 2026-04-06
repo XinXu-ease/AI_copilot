@@ -17,12 +17,9 @@ def intake_node(state: ProjectState) -> dict:
         history=state.get("clarification_answers", []),
     )
     
-    # If user has already answered clarification questions, clear missing_info to proceed
+    # If user has already answered clarification questions, move forward
     clarification_questions = []
-    if state.get("clarification_answers"):
-        # User has responded to questions - clear missing_info and move forward
-        brief.missing_info = []
-    elif brief.missing_info:
+    if not state.get("clarification_answers") and brief.missing_info:
         # First time asking - prioritize top 5 most critical questions
         clarification_questions = pm.prioritize_clarification_questions(brief)
     
@@ -34,9 +31,9 @@ def intake_node(state: ProjectState) -> dict:
 
 
 def clarification_router(state: ProjectState) -> str:
-    brief = state.get("brief")
-    missing_info = brief.missing_info if brief else []
-    if brief and missing_info:
+    clarification_questions = state.get("clarification_questions", [])
+    # If there are clarification questions, we need clarification
+    if clarification_questions and len(clarification_questions) > 0:
         return "need_clarification"
     return "ready_for_research"
 

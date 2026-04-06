@@ -50,6 +50,51 @@ def _extract_text(response: Any) -> str:
         raise LLMServiceError(f"Failed to extract response text: {exc}") from exc
 
 
+RESPONSE_LENGTH_INSTRUCTION = (
+    "Keep the entire JSON response under 2000 characters. "
+    "Prefer concise field values and short lists. "
+    "If a field can be expressed with fewer words, do so."
+)
+
+
+def _extract_balanced_json(text: str) -> str | None:
+    """Try to recover the first balanced JSON object from a response."""
+    start = text.find("{")
+    if start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escaped = False
+
+    for index in range(start, len(text)):
+        char = text[index]
+
+        if escaped:
+            escaped = False
+            continue
+
+        if char == "\\":
+            escaped = True
+            continue
+
+        if char == '"':
+            in_string = not in_string
+            continue
+
+        if in_string:
+            continue
+
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:index + 1]
+
+    return None
+
+
 def call_text(
     system_prompt: str,
     user_prompt: str,
@@ -92,7 +137,8 @@ def call_json(
     final_user_prompt = (
         user_prompt
         + "\n\nReturn valid JSON only. Do not wrap in markdown. "
-          "Do not include any explanation outside the JSON object."
+            "Do not include any explanation outside the JSON object. "
+            f"{RESPONSE_LENGTH_INSTRUCTION}"
     )
 
     try:
@@ -164,7 +210,8 @@ def call_llm_json(
         user_prompt
         + "\n\nReturn valid JSON only. "
           "Do not wrap in markdown. "
-          "Do not include any explanation outside the JSON object."
+            "Do not include any explanation outside the JSON object. "
+            f"{RESPONSE_LENGTH_INSTRUCTION}"
     )
 
     try:
@@ -196,6 +243,14 @@ def call_llm_json(
             data = json.loads(text)
             return data
         except json.JSONDecodeError as exc:
+            recovered = _extract_balanced_json(text)
+            if recovered and recovered != text:
+                try:
+                    logger.warning("Attempting to recover JSON from balanced object substring")
+                    return json.loads(recovered)
+                except json.JSONDecodeError:
+                    pass
+
             error_msg = (
                 f"Model output was not valid JSON.\n"
                 f"{debug_info}\n"

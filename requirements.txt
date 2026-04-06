@@ -6,3 +6,5 @@ openai
 sqlalchemy
 langchain
 langchain-openai
+flask
+flask-cors

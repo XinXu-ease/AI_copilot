@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Product Team Copilot</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #0066cc 0%, #0052a3 100%);
+            color: white;
+            padding: 40px 20px;
+            margin: -20px -20px 30px -20px;
+            text-align: center;
+            border-radius: 0 0 8px 8px;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        /* Main content */
+        .content-wrapper {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        /* Form section */
+        .form-section {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .form-section h2 {
+            color: #0066cc;
+            font-size: 18px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e8ff;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        textarea,
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d0d8e8;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        textarea:focus,
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #0066cc;
+            box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 120px;
+        }
+
+        button {
+            background: linear-gradient(135deg, #0066cc 0%, #0052a3 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 100%;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 102, 204, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Stage overview */
+        .stage-overview {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .stage-overview h2 {
+            color: #0066cc;
+            font-size: 18px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e8ff;
+            padding-bottom: 10px;
+        }
+
+        .stage-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+        }
+
+        .stage-card {
+            text-align: center;
+            padding: 15px;
+            border-radius: 6px;
+            background: #f5f7fa;
+            border: 2px solid #e0e8ff;
+            transition: all 0.3s;
+        }
+
+        .stage-card.completed {
+            background: #e0f2ff;
+            border-color: #0066cc;
+        }
+
+        .stage-card.in-progress {
+            background: #cce5ff;
+            border-color: #0052a3;
+            box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+        }
+
+        .stage-card-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        .stage-card-status {
+            font-size: 13px;
+            font-weight: 600;
+            color: #0066cc;
+        }
+
+        .stage-card.in-progress .stage-card-status {
+            color: #0052a3;
+        }
+
+        /* Results section */
+        .results-section {
+            grid-column: 1 / -1;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .results-section h2 {
+            color: #0066cc;
+            font-size: 18px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e8ff;
+            padding-bottom: 10px;
+        }
+
+        .result-item {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f9fafb;
+            border-left: 4px solid #0066cc;
+            border-radius: 4px;
+        }
+
+        .result-item h3 {
+            color: #0052a3;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .result-content {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #555;
+        }
+
+        .result-content ul {
+            list-style-position: inside;
+            margin-top: 8px;
+        }
+
+        .result-content li {
+            margin-bottom: 6px;
+        }
+
+        /* Hidden content */
+        .hidden {
+            display: none;
+        }
+
+        /* Loading state */
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #e0e8ff;
+            border-top-color: #0066cc;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 8px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Current phase display */
+        .current-phase {
+            background: linear-gradient(135deg, #e0f2ff 0%, #cce5ff 100%);
+            padding: 15px;
+            border-radius: 6px;
+            color: #0052a3;
+            font-weight: 600;
+            margin-bottom: 20px;
+            border-left: 4px solid #0066cc;
+        }
+
+        /* Clarification questions */
+        .clarification-section {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .clarification-section h2 {
+            color: #0066cc;
+            font-size: 18px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e8ff;
+            padding-bottom: 10px;
+        }
+
+        .question-block {
+            margin-bottom: 20px;
+        }
+
+        .question-text {
+            background: #f9fafb;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            color: #0052a3;
+            font-weight: 500;
+        }
+
+        .question-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d0d8e8;
+            border-radius: 6px;
+            font-family: inherit;
+        }
+
+        /* Error message */
+        .error-message {
+            background: #ffe0e0;
+            color: #c00;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            border-left: 4px solid #c00;
+        }
+
+        /* Success message */
+        .success-message {
+            background: #e0ffe0;
+            color: #060;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            border-left: 4px solid #060;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .content-wrapper {
+                grid-template-columns: 1fr;
+            }
+
+            .header h1 {
+                font-size: 24px;
+            }
+
+            .stage-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        /* Loading skeleton */
+        .skeleton {
+            background: linear-gradient(90deg, #e0e8ff 25%, #cce5ff 50%, #e0e8ff 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+        }
+
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 AI Product Team Copilot</h1>
+            <p>Collaborate with AI agents to validate and develop your product idea</p>
+        </div>
+
+        <div id="app"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000/api';
+        const API_TIMEOUT = 300000; // 5 minutes
+        const STAGE_DEFS = [
+            { key: 'brief', label: 'PM Brief' },
+            { key: 'research_round1', label: 'Research Round 1' },
+            { key: 'research_round2', label: 'Research Round 2' },
+            { key: 'ux', label: 'UX Design' },
+            { key: 'dev', label: 'Developer Plan' }
+        ];
+
+        let currentProjectId = null;
+        let currentState = null;
+        let projectPollTimer = null;
+
+        // 诊断信息
+        function showDiagnostics(error) {
+            console.error("Full error object:", error);
+            const diagnostics = `
+🔧 Connection Diagnostic Information:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+API URL: ${API_BASE}
+Error: ${error.message}
+
+📋 Checklist:
+❓ Is Flask backend running at http://localhost:5000?
+   Run: python app_api.py
+
+❓ Check if port 5000 is in use:
+   Windows: netstat -ano | findstr :5000
+   Mac/Linux: lsof -i :5000
+
+❓ Is CORS properly configured? (should be automatic)
+
+❓ Check browser console for more details (F12)
+
+💡 Quick Fix:
+1. Terminal 1: python app_api.py
+2. Terminal 2: python -m http.server 8000
+3. Browser: http://localhost:8000/index.html
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            `;
+            return diagnostics;
+        }
+
+        // API 健康检查
+        async function checkApiHealth() {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                
+                const response = await fetch(`${API_BASE.replace('/api', '')}/health`, {
+                    method: 'GET',
+                    signal: controller.signal,
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                clearTimeout(timeoutId);
+                
+                console.log("Health check response:", response.status);
+                return response.ok;
+            } catch (error) {
+                console.error("API health check failed:", error);
+                return false;
+            }
+        }
+
+        function getValue(data, key, defaultValue = null) {
+            if (!data) return defaultValue;
+            if (typeof data === 'object') return data[key] ?? defaultValue;
+            return defaultValue;
+        }
+
+        function getStageIndex(stageKey) {
+            return STAGE_DEFS.findIndex(stage => stage.key === stageKey);
+        }
+
+        function stopProjectPolling() {
+            if (projectPollTimer) {
+                clearInterval(projectPollTimer);
+                projectPollTimer = null;
+            }
+        }
+
+        async function refreshProjectState() {
+            if (!currentProjectId) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/project/${currentProjectId}`, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+
+                if (!response.ok) {
+                    return;
+                }
+
+                const result = await response.json();
+                if (result.success && result.state) {
+                    currentState = result.state;
+                    renderProjectView();
+
+                    const workflowStatus = getValue(currentState, 'workflow_status', 'running');
+                    if (workflowStatus !== 'running') {
+                        stopProjectPolling();
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to refresh project state:', error);
+            }
+        }
+
+        function startProjectPolling() {
+            stopProjectPolling();
+            projectPollTimer = setInterval(refreshProjectState, 1500);
+        }
+
+        function getStageState(state) {
+            const currentStage = getCurrentStage(state);
+            const currentStageIndex = getStageIndex(currentStage);
+            const workflowStatus = getValue(state, 'workflow_status', 'running');
+            const brief = getValue(state, 'brief');
+
+            return {
+                brief: !!brief && currentStageIndex > getStageIndex('brief'),
+                research_round1: !!getValue(state, 'research_round1') && currentStageIndex > getStageIndex('research_round1'),
+                research_round2: !!getValue(state, 'research_round2') && currentStageIndex > getStageIndex('research_round2'),
+                ux: (!!getValue(state, 'ux_v1') || !!getValue(state, 'ux_v2')) && currentStageIndex > getStageIndex('ux'),
+                dev: !!getValue(state, 'dev_output') && (workflowStatus === 'completed' || currentStageIndex > getStageIndex('dev'))
+            };
+        }
+
+        function getCurrentStage(state) {
+            const directStage = getValue(state, 'current_stage', '');
+            if (directStage) return directStage;
+
+            const currentPhase = getValue(state, 'current_phase', '');
+
+            if (currentPhase === 'brief_ready') return 'brief';
+            if (currentPhase === 'research_round1_done' || currentPhase === 'research_feedback_done') return 'research_round1';
+            if (currentPhase === 'research_validated') return 'research_round2';
+            if (currentPhase === 'ux_v1_done' || currentPhase === 'ux_feedback_done' || currentPhase === 'ux_validated') return 'ux';
+            if (currentPhase === 'completed') return 'dev';
+            return 'brief';
+        }
+
+        function renderInitialForm() {
+            const appDiv = document.getElementById('app');
+            appDiv.innerHTML = `
+                <div class="content-wrapper">
+                    <div class="form-section">
+                        <h2>📝 Project Idea</h2>
+                        <div class="form-group">
+                            <label for="ideaInput">What do you want to build?</label>
+                            <textarea id="ideaInput" placeholder="Describe your product idea, problem, or concept..."></textarea>
+                        </div>
+                        <button onclick="startProject()">Start Project</button>
+                    </div>
+                    <div class="stage-overview">
+                        <h2>📊 Workflow Stages</h2>
+                        <div class="stage-grid">
+                            ${STAGE_DEFS.map(s => `
+                                <div class="stage-card">
+                                    <div class="stage-card-label">${s.label}</div>
+                                    <div class="stage-card-status">Pending</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function startProject() {
+            const idea = document.getElementById('ideaInput')?.value || '';
+            if (!idea.trim()) {
+                alert('Please enter your project idea');
+                return;
+            }
+
+            const button = event.target;
+            button.disabled = true;
+            button.innerHTML = '<span class="loading"></span>Checking backend...';
+
+            try {
+                console.log("Checking API health...");
+                
+                // Check API health first
+                const isHealthy = await checkApiHealth();
+                if (!isHealthy) {
+                    console.error("Backend health check failed");
+                    const diagnostics = showDiagnostics(new Error("API server not responding - backend may not be running"));
+                    alert('❌ Cannot connect to API backend!\n\nPlease ensure:\n1. Terminal with: python app_api.py\n2. Wait for "Running on http://0.0.0.0:5000" message\n3. Then try again\n\nDetails:\n' + diagnostics);
+                    button.disabled = false;
+                    button.innerHTML = 'Start Project';
+                    return;
+                }
+
+                console.log("Backend health OK, sending project creation request...");
+                button.innerHTML = '<span class="loading"></span>Creating project...';
+
+                const response = await fetch(`${API_BASE}/project/start`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ idea })
+                });
+
+                console.log("Project start response status:", response.status);
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error("API error response:", errorText);
+                    let errorMsg = 'Server error';
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        errorMsg = errorJson.error || errorText;
+                    } catch {
+                        errorMsg = errorText;
+                    }
+                    throw new Error(`Server returned ${response.status}: ${errorMsg}`);
+                }
+
+                const result = await response.json();
+                console.log("Project created successfully:", result.project_id);
+
+                if (result.success) {
+                    currentProjectId = result.project_id;
+                    currentState = result.state;
+                    renderProjectView();
+                    startProjectPolling();
+                } else {
+                    alert('❌ Error: ' + (result.error || 'Unknown error'));
+                    button.disabled = false;
+                    button.innerHTML = 'Start Project';
+                }
+            } catch (error) {
+                console.error('Full error:', error);
+                const diagnostics = showDiagnostics(error);
+                console.log(diagnostics);
+                alert('❌ Failed to start project\n\n' + diagnostics);
+                button.disabled = false;
+                button.innerHTML = 'Start Project';
+            }
+        }
+
+        function renderStageOverview(state) {
+            const currentStage = getCurrentStage(state);
+            const currentStageIndex = getStageIndex(currentStage);
+            const workflowStatus = getValue(state, 'workflow_status', 'running');
+
+            return `
+                <div class="stage-overview">
+                    <h2>📊 Workflow Stages</h2>
+                    <div class="stage-grid">
+                        ${STAGE_DEFS.map(stage => {
+                            const stageIndex = getStageIndex(stage.key);
+                            const stageHasData = stage.key === 'brief'
+                                ? !!getValue(state, 'brief')
+                                : stage.key === 'research_round1'
+                                    ? !!getValue(state, 'research_round1')
+                                    : stage.key === 'research_round2'
+                                        ? !!getValue(state, 'research_round2')
+                                        : stage.key === 'ux'
+                                            ? !!getValue(state, 'ux_v1') || !!getValue(state, 'ux_v2')
+                                            : !!getValue(state, 'dev_output');
+
+                            let statusClass = '';
+                            let status = 'Pending';
+                            const isFinalCompletedStage = workflowStatus === 'completed' && stage.key === 'dev';
+
+                            if (isFinalCompletedStage) {
+                                statusClass = 'completed';
+                                status = '✓ Completed';
+                            } else if (stage.key === currentStage) {
+                                statusClass = 'in-progress';
+                                status = workflowStatus === 'awaiting_clarification' && stage.key === 'brief'
+                                    ? '⚡ Waiting for Clarification'
+                                    : '⚡ In Progress';
+                            } else if (stageHasData && currentStageIndex !== -1 && stageIndex !== -1 && stageIndex < currentStageIndex) {
+                                statusClass = 'completed';
+                                status = '✓ Completed';
+                            }
+
+                            return `
+                                <div class="stage-card ${statusClass}">
+                                    <div class="stage-card-label">${stage.label}</div>
+                                    <div class="stage-card-status">${status}</div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function formatBriefData(brief) {
+            if (!brief) return '';
+            return `
+                <div class="result-item">
+                    <h3><strong>${brief.title || 'Untitled'}</strong></h3>
+                    <div class="result-content">
+                        <p><strong>Problem:</strong> ${brief.problem_statement || 'Not specified'}</p>
+                        <p><strong>Target Users:</strong> ${brief.target_users?.length ? brief.target_users.join(', ') : 'Not specified'}</p>
+                        ${brief.desired_outputs?.length ? `<p><strong>Desired Outputs:</strong> ${brief.desired_outputs.join(', ')}</p>` : ''}
+                        ${brief.constraints?.length ? `<p><strong>Constraints:</strong> ${brief.constraints.join(', ')}</p>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderClarificationForm(state) {
+            const clarificationQuestions = getValue(state, 'clarification_questions', []);
+            if (!clarificationQuestions.length) return '';
+
+            const existingAnswers = getValue(state, 'clarification_answers', []);
+
+            return `
+                <div class="clarification-section">
+                    <h2>❓ PM Follow-up Questions</h2>
+                    <p style="margin-bottom: 20px; color: #666; font-size: 14px;">Please answer these questions to help us better understand your project:</p>
+                    ${clarificationQuestions.map((q, i) => `
+                        <div class="question-block">
+                            <div class="question-text">${i + 1}. ${q}</div>
+                            <input type="text" class="question-input" id="answer_${i}" 
+                                   placeholder="Your answer..." value="${existingAnswers[i] || ''}">
+                        </div>
+                    `).join('')}
+                    <button onclick="submitClarification()">Continue to Research</button>
+                </div>
+            `;
+        }
+
+        async function submitClarification() {
+            const clarificationQuestions = getValue(currentState, 'clarification_questions', []);
+            const answers_arr = [];
+
+            for (let i = 0; i < clarificationQuestions.length; i++) {
+                const input = document.getElementById(`answer_${i}`);
+                answers_arr.push(input?.value || '');
+            }
+
+            const button = event.target;
+            button.disabled = true;
+            button.innerHTML = '<span class="loading"></span>Processing...';
+
+            try {
+                const response = await fetch(`${API_BASE}/project/${currentProjectId}/clarification`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ answers: answers_arr })
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    let errorMsg = 'Server error';
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        errorMsg = errorJson.error || errorText;
+                    } catch {
+                        errorMsg = errorText;
+                    }
+                    throw new Error(`Server returned ${response.status}: ${errorMsg}`);
+                }
+
+                const result = await response.json();
+                if (result.success) {
+                    currentState = result.state;
+                    renderProjectView();
+                    startProjectPolling();
+                } else {
+                    alert('❌ Error: ' + (result.error || 'Unknown error'));
+                    button.disabled = false;
+                    button.innerHTML = 'Continue to Research';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('❌ Failed to submit: ' + error.message);
+                button.disabled = false;
+                button.innerHTML = 'Continue to Research';
+            }
+        }
+
+        function renderProjectView() {
+            const appDiv = document.getElementById('app');
+            const currentStage = getCurrentStage(currentState);
+            const workflowStatus = getValue(currentState, 'workflow_status', 'running');
+            const brief = getValue(currentState, 'brief');
+            const clarificationQuestions = getValue(currentState, 'clarification_questions', []);
+            const research_round1 = getValue(currentState, 'research_round1');
+            const research_round2 = getValue(currentState, 'research_round2');
+            const ux_v1 = getValue(currentState, 'ux_v1');
+            const dev_output = getValue(currentState, 'dev_output');
+
+            let html = renderStageOverview(currentState);
+
+            let statusText = 'Workflow is running';
+            if (workflowStatus === 'awaiting_clarification') {
+                statusText = 'Waiting for clarification answers';
+            } else if (workflowStatus === 'completed') {
+                statusText = 'Workflow completed';
+            } else if (workflowStatus === 'error') {
+                statusText = `Workflow error: ${getValue(currentState, 'workflow_error', 'Unknown error')}`;
+            }
+
+            html += `
+                <div class="current-phase">
+                    <strong>Current Stage:</strong> ${currentStage.replace(/_/g, ' ').toUpperCase()} |
+                    <strong>Status:</strong> ${workflowStatus.replace(/_/g, ' ').toUpperCase()}
+                    <div style="margin-top: 8px; font-weight: 500;">${statusText}</div>
+                </div>
+            `;
+
+            if (brief) {
+                html += `
+                    <div class="results-section">
+                        <h2>📋 Structured Brief</h2>
+                        ${formatBriefData(brief)}
+                    </div>
+                `;
+            }
+
+            if (currentStage === 'brief' && clarificationQuestions.length) {
+                html += renderClarificationForm(currentState);
+            }
+
+            if (research_round1) {
+                html += `
+                    <div class="results-section">
+                        <h2>🔍 Research Round 1</h2>
+                        <div class="result-item">
+                            <div class="result-content">
+                                <pre style="white-space: pre-wrap; font-size: 12px;">${JSON.stringify(research_round1, null, 2)}</pre>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (research_round2) {
+                html += `
+                    <div class="results-section">
+                        <h2>🔍 Research Round 2</h2>
+                        <div class="result-item">
+                            <div class="result-content">
+                                <pre style="white-space: pre-wrap; font-size: 12px;">${JSON.stringify(research_round2, null, 2)}</pre>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (ux_v1) {
+                html += `
+                    <div class="results-section">
+                        <h2>🎨 UX Design Output</h2>
+                        <div class="result-item">
+                            <div class="result-content">
+                                <pre style="white-space: pre-wrap; font-size: 12px;">${JSON.stringify(ux_v1, null, 2)}</pre>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (dev_output) {
+                html += `
+                    <div class="results-section">
+                        <h2>💻 Developer Output</h2>
+                        <div class="result-item">
+                            <div class="result-content">
+                                <pre style="white-space: pre-wrap; font-size: 12px;">${JSON.stringify(dev_output, null, 2)}</pre>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            appDiv.innerHTML = html;
+        }
+
+        // Initial render
+        renderInitialForm();
+    </script>
+</body>
+</html>
