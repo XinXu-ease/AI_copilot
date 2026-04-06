@@ -1,0 +1,4 @@
+# Only deploy static frontend assets to Vercel
+*
+!index.html
+!vercel.json
