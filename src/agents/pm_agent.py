@@ -1,6 +1,12 @@
 import json
 from src.agents.base import BaseAgent
-from src.prompts.pm import PM_SYSTEM_PROMPT, DVF_FEEDBACK_PROMPT, RESEARCH_FEEDBACK_PROMPT, UX_FEEDBACK_PROMPT
+from src.prompts.pm import (
+  PM_SYSTEM_PROMPT,
+  DVF_FEEDBACK_PROMPT,
+  RESEARCH_FEEDBACK_PROMPT,
+  RESEARCH_EVALUATOR_PROMPT,
+  UX_FEEDBACK_PROMPT,
+)
 from src.schemas.brief import ProjectBrief
 from src.services.llm_service import call_llm_json
 
@@ -182,6 +188,72 @@ Output schema:
 }}
 """
         return call_llm_json(DVF_FEEDBACK_PROMPT, user_prompt)
+
+  def evaluate_research_quality(
+    self,
+    brief: ProjectBrief,
+    research_output: dict,
+    *,
+    iteration: int,
+    max_rounds: int = 3,
+    pass_threshold: float = 7.0,
+  ) -> dict:
+    """Score research quality and decide whether to iterate or proceed."""
+    user_prompt = f"""
+Project brief:
+{json.dumps(brief.model_dump(), indent=2)}
+
+Research output:
+{json.dumps(research_output, indent=2)}
+
+Current iteration: {iteration}
+Max rounds: {max_rounds}
+Pass threshold: {pass_threshold}
+
+Task:
+Evaluate this research using the provided rubric and return a structured decision.
+
+Output schema:
+{{
+  "overall_score": 0.0,
+  "pass_threshold": {pass_threshold},
+  "dimension_scores": {{
+  "evidence_quality": 0.0,
+  "coverage": 0.0,
+  "consistency": 0.0,
+  "actionability": 0.0,
+  "risk_awareness": 0.0
+  }},
+  "strengths": ["string"],
+  "fail_reasons": ["string"],
+  "targeted_revision_actions": ["string"],
+  "next_action": "proceed_to_ux|revise_research|force_proceed_with_risk",
+  "confidence": "low|medium|high"
+}}
+"""
+    result = call_llm_json(RESEARCH_EVALUATOR_PROMPT, user_prompt)
+
+    overall_score = float(result.get("overall_score", 0.0) or 0.0)
+    dimension_scores = result.get("dimension_scores", {}) or {}
+    evidence_score = float(dimension_scores.get("evidence_quality", 0.0) or 0.0)
+
+    passes_gate = overall_score >= pass_threshold and evidence_score >= 6.5
+    if passes_gate:
+      next_action = "proceed_to_ux"
+    elif iteration < max_rounds:
+      next_action = "revise_research"
+    else:
+      next_action = "force_proceed_with_risk"
+
+    return {
+      **result,
+      "overall_score": round(overall_score, 2),
+      "pass_threshold": pass_threshold,
+      "iteration": iteration,
+      "max_rounds": max_rounds,
+      "passes_gate": passes_gate,
+      "next_action": next_action,
+    }
 
     def run(self, raw_idea: str, history: list[str] | None = None) -> ProjectBrief:
         return self.build_brief(raw_idea=raw_idea, history=history)

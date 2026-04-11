@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Type, TypeVar
+from typing import Any, Callable, Type, TypeVar
 
 from openai import OpenAI
 from pydantic import BaseModel, ValidationError
@@ -34,6 +34,9 @@ class LLMJSONParseError(LLMServiceError):
 
 class LLMValidationError(LLMServiceError):
     pass
+
+
+ToolHandler = Callable[[dict[str, Any]], Any]
 
 
 def _build_messages(system_prompt: str, user_prompt: str) -> list[dict[str, str]]:
@@ -93,6 +96,28 @@ def _extract_balanced_json(text: str) -> str | None:
                 return text[start:index + 1]
 
     return None
+
+
+def _parse_json_text(text: str) -> dict[str, Any]:
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        text = text.replace("json\n", "", 1).strip()
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        recovered = _extract_balanced_json(text)
+        if recovered and recovered != text:
+            try:
+                logger.warning("Attempting to recover JSON from balanced object substring")
+                return json.loads(recovered)
+            except json.JSONDecodeError:
+                pass
+
+        raise LLMJSONParseError(
+            f"Model output was not valid JSON.\nRaw output:\n{text[:1500]}"
+        ) from exc
 
 
 def call_text(
@@ -194,6 +219,105 @@ def call_pydantic(
             f"JSON did not match schema {schema.__name__}: {exc}"
         ) from exc
 
+
+def call_llm_json_with_tools(
+    system_prompt: str,
+    user_prompt: str,
+    *,
+    tools: list[dict[str, Any]],
+    tool_handlers: dict[str, ToolHandler],
+    max_tool_rounds: int = 4,
+    model: str | None = None,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+) -> dict[str, Any]:
+    model = model or settings.LITELLM_MODEL
+    temperature = settings.LLM_TEMPERATURE if temperature is None else temperature
+    max_tokens = settings.LLM_MAX_TOKENS if max_tokens is None else max_tokens
+
+    final_user_prompt = (
+        user_prompt
+        + "\n\nReturn valid JSON only. "
+          "Do not wrap in markdown. "
+          "Do not include any explanation outside the JSON object. "
+          f"{RESPONSE_LENGTH_INSTRUCTION}"
+    )
+
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": final_user_prompt},
+    ]
+
+    try:
+        for _ in range(max_tool_rounds + 1):
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=settings.LLM_TIMEOUT,
+                response_format={"type": "json_object"},
+            )
+
+            message = response.choices[0].message
+            tool_calls = message.tool_calls or []
+
+            if not tool_calls:
+                text = (message.content or "").strip()
+                return _parse_json_text(text)
+
+            assistant_message: dict[str, Any] = {
+                "role": "assistant",
+                "content": message.content or "",
+                "tool_calls": [
+                    {
+                        "id": call.id,
+                        "type": "function",
+                        "function": {
+                            "name": call.function.name,
+                            "arguments": call.function.arguments or "{}",
+                        },
+                    }
+                    for call in tool_calls
+                ],
+            }
+            messages.append(assistant_message)
+
+            for call in tool_calls:
+                tool_name = call.function.name
+                handler = tool_handlers.get(tool_name)
+                if handler is None:
+                    tool_result: Any = {"error": f"Tool not implemented: {tool_name}"}
+                else:
+                    try:
+                        raw_arguments = call.function.arguments or "{}"
+                        args = json.loads(raw_arguments)
+                    except json.JSONDecodeError:
+                        args = {}
+
+                    try:
+                        tool_result = handler(args)
+                    except Exception as tool_exc:
+                        logger.exception("Tool execution failed: %s", tool_name)
+                        tool_result = {"error": f"Tool {tool_name} failed: {str(tool_exc)}"}
+
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "content": json.dumps(tool_result, ensure_ascii=False),
+                    }
+                )
+
+        raise LLMServiceError("Tool-calling exceeded max rounds without final JSON output")
+    except LLMJSONParseError:
+        raise
+    except Exception as exc:
+        logger.exception("LLM tool-calling failed")
+        raise LLMServiceError(f"LLM tool-calling failed: {exc}") from exc
+
 def call_llm_json(
     system_prompt: str,
     user_prompt: str,
@@ -225,39 +349,17 @@ def call_llm_json(
         )
 
         text = _extract_text(response).strip()
-        
+
         # 调试信息
         debug_info = f"\n[DEBUG] Model: {model} | Response length: {len(text)}"
         if len(text) > 0:
             debug_info += f"\nFirst 300 chars:\n{text[:300]}"
         else:
             debug_info += "\n!!! EMPTY RESPONSE FROM MODEL !!!"
-        
+
         logger.info(debug_info)
 
-        if text.startswith("```"):
-            text = text.strip("`")
-            text = text.replace("json\n", "", 1).strip()
-
-        try:
-            data = json.loads(text)
-            return data
-        except json.JSONDecodeError as exc:
-            recovered = _extract_balanced_json(text)
-            if recovered and recovered != text:
-                try:
-                    logger.warning("Attempting to recover JSON from balanced object substring")
-                    return json.loads(recovered)
-                except json.JSONDecodeError:
-                    pass
-
-            error_msg = (
-                f"Model output was not valid JSON.\n"
-                f"{debug_info}\n"
-                f"Full output:\n{text[:1500]}"
-            )
-            logger.exception(error_msg)
-            raise LLMJSONParseError(error_msg) from exc
+        return _parse_json_text(text)
 
     except LLMJSONParseError:
         raise

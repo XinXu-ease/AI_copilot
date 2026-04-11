@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, TypedDict
+from typing import Any, List, Optional, Dict, TypedDict
 from pydantic import BaseModel
 from .brief import ProjectBrief
 from .research import ResearchOutput
@@ -27,9 +27,10 @@ class ProjectState(TypedDict, total=False):
     clarification_questions: List[str]  # Top 5 prioritized questions (LLM-selected)
     clarification_answers: List[str]
 
-    research_round1: Optional[ResearchOutput]
-    research_feedback: List[FeedbackBundle]
-    research_round2: Optional[ResearchOutput]
+    research_cycles: List[Dict[str, Any]]
+    research_iteration: int
+    research_eval: Dict[str, Any]
+    risk_flag: Optional[str]
 
     validated_insights: List[str]
     opportunities: List[str]
@@ -44,3 +45,4 @@ class ProjectState(TypedDict, total=False):
 
     decisions_log: List[DecisionLog]
     next_action: Optional[str]
+    execution_metrics: Dict[str, Any]

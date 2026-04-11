@@ -3,9 +3,9 @@ from src.schemas.state import ProjectState
 from src.workflows.nodes import (
     intake_node,
     clarification_router,
-    research_round1_node,
-    research_feedback_node,
-    research_round2_node,
+    research_cycle_node,
+    research_evaluator_node,
+    research_evaluator_router,
     ux_design_node,
     ux_feedback_node,
     ux_revision_node,
@@ -15,9 +15,8 @@ from src.workflows.nodes import (
 builder = StateGraph(ProjectState)
 
 builder.add_node("intake", intake_node)
-builder.add_node("research_round1", research_round1_node)
-builder.add_node("research_feedback", research_feedback_node)
-builder.add_node("research_round2", research_round2_node)
+builder.add_node("research_cycle", research_cycle_node)
+builder.add_node("research_evaluator", research_evaluator_node)
 builder.add_node("ux_design", ux_design_node)
 builder.add_node("ux_feedback", ux_feedback_node)
 builder.add_node("ux_revision", ux_revision_node)
@@ -30,13 +29,20 @@ builder.add_conditional_edges(
     clarification_router,
     {
         "need_clarification": END,       # first version先停在这里让前端继续问用户
-        "ready_for_research": "research_round1",
+        "ready_for_research": "research_cycle",
     },
 )
 
-builder.add_edge("research_round1", "research_feedback")
-builder.add_edge("research_feedback", "research_round2")
-builder.add_edge("research_round2", "ux_design")
+builder.add_edge("research_cycle", "research_evaluator")
+builder.add_conditional_edges(
+    "research_evaluator",
+    research_evaluator_router,
+    {
+        "iterate_research": "research_cycle",
+        "proceed_to_ux": "ux_design",
+        "force_proceed": "ux_design",
+    },
+)
 builder.add_edge("ux_design", "ux_feedback")
 builder.add_edge("ux_feedback", "ux_revision")
 builder.add_edge("ux_revision", "developer")

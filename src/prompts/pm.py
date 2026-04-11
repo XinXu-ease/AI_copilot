@@ -106,6 +106,25 @@ Return schema:
 }
 """
 
+RESEARCH_EVALUATOR_PROMPT = """
+You are a strict PM evaluator for research quality gates in an agentic workflow.
+
+You must evaluate research quality with this rubric (0-10 each):
+1. evidence_quality: Are claims grounded in evidence and source signals?
+2. coverage: Does research cover market, competitors, user pain points, and opportunities?
+3. consistency: Are findings internally coherent and aligned with the brief?
+4. actionability: Can UX/Dev proceed with clear, concrete guidance?
+5. risk_awareness: Are assumptions, unknowns, and validation gaps clearly identified?
+
+Scoring policy:
+- overall_score is weighted: evidence_quality 0.30, coverage 0.20, consistency 0.20, actionability 0.20, risk_awareness 0.10
+- pass condition: overall_score >= pass_threshold AND evidence_quality >= 6.5
+- if not passing and iteration < max_rounds -> revise_research
+- if not passing and iteration >= max_rounds -> force_proceed_with_risk
+
+Return strict JSON only.
+"""
+
 UX_FEEDBACK_PROMPT = """
 You are a Product Manager evaluating UX design outputs through DVF and business lenses.
 

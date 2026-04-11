@@ -364,14 +364,14 @@
         <div id="app"></div>
     </div>
 
-    <script>
+    <script> // API 基础 URL 配置
         // 线上部署时，把这个值改成你的后端域名，例如：
         // https://your-backend.onrender.com/api
         const DEPLOY_API_BASE = 'https://aicopilot-production.up.railway.app/api';
 
         function normalizeApiBase(base) {
             return (base || '').trim().replace(/\/+$/, '');
-        }
+        }// 解析 API 基础 URL 的优先级：查询字符串 > 内置配置 > 同域反向代理
 
         function resolveApiBase() {
             const queryApiBase = new URLSearchParams(window.location.search).get('apiBase');
@@ -398,8 +398,7 @@
         const API_TIMEOUT = 300000; // 5 minutes
         const STAGE_DEFS = [
             { key: 'brief', label: 'PM Brief' },
-            { key: 'research_round1', label: 'Research Round 1' },
-            { key: 'research_round2', label: 'Research Round 2' },
+            { key: 'research', label: 'Research Loop' },
             { key: 'ux', label: 'UX Design' },
             { key: 'dev', label: 'Developer Plan' }
         ];
@@ -472,6 +471,17 @@ For deployment:
             return defaultValue;
         }
 
+        function getLatestResearchCycle(state) {
+            const cycles = getValue(state, 'research_cycles', []);
+            if (!Array.isArray(cycles) || cycles.length === 0) return null;
+
+            return cycles.reduce((best, item) => {
+                const bestIteration = Number(best?.iteration || 0);
+                const itemIteration = Number(item?.iteration || 0);
+                return itemIteration >= bestIteration ? item : best;
+            }, null);
+        }
+
         function getStageIndex(stageKey) {
             return STAGE_DEFS.findIndex(stage => stage.key === stageKey);
         }
@@ -521,11 +531,11 @@ For deployment:
             const currentStageIndex = getStageIndex(currentStage);
             const workflowStatus = getValue(state, 'workflow_status', 'running');
             const brief = getValue(state, 'brief');
+            const researchCycles = getValue(state, 'research_cycles', []);
 
             return {
                 brief: !!brief && currentStageIndex > getStageIndex('brief'),
-                research_round1: !!getValue(state, 'research_round1') && currentStageIndex > getStageIndex('research_round1'),
-                research_round2: !!getValue(state, 'research_round2') && currentStageIndex > getStageIndex('research_round2'),
+                research: Array.isArray(researchCycles) && researchCycles.length > 0 && currentStageIndex > getStageIndex('research'),
                 ux: (!!getValue(state, 'ux_v1') || !!getValue(state, 'ux_v2')) && currentStageIndex > getStageIndex('ux'),
                 dev: !!getValue(state, 'dev_output') && (workflowStatus === 'completed' || currentStageIndex > getStageIndex('dev'))
             };
@@ -538,8 +548,7 @@ For deployment:
             const currentPhase = getValue(state, 'current_phase', '');
 
             if (currentPhase === 'brief_ready') return 'brief';
-            if (currentPhase === 'research_round1_done' || currentPhase === 'research_feedback_done') return 'research_round1';
-            if (currentPhase === 'research_validated') return 'research_round2';
+            if (currentPhase === 'research_in_progress' || currentPhase === 'research_evaluated' || currentPhase === 'research_validated') return 'research';
             if (currentPhase === 'ux_v1_done' || currentPhase === 'ux_feedback_done' || currentPhase === 'ux_validated') return 'ux';
             if (currentPhase === 'completed') return 'dev';
             return 'brief';
@@ -658,12 +667,11 @@ For deployment:
                     <div class="stage-grid">
                         ${STAGE_DEFS.map(stage => {
                             const stageIndex = getStageIndex(stage.key);
+                            const researchCycles = getValue(state, 'research_cycles', []);
                             const stageHasData = stage.key === 'brief'
                                 ? !!getValue(state, 'brief')
-                                : stage.key === 'research_round1'
-                                    ? !!getValue(state, 'research_round1')
-                                    : stage.key === 'research_round2'
-                                        ? !!getValue(state, 'research_round2')
+                                : stage.key === 'research'
+                                    ? Array.isArray(researchCycles) && researchCycles.length > 0
                                         : stage.key === 'ux'
                                             ? !!getValue(state, 'ux_v1') || !!getValue(state, 'ux_v2')
                                             : !!getValue(state, 'dev_output');
@@ -793,10 +801,12 @@ For deployment:
             const workflowStatus = getValue(currentState, 'workflow_status', 'running');
             const brief = getValue(currentState, 'brief');
             const clarificationQuestions = getValue(currentState, 'clarification_questions', []);
-            const research_round1 = getValue(currentState, 'research_round1');
-            const research_round2 = getValue(currentState, 'research_round2');
+            const researchCycles = getValue(currentState, 'research_cycles', []);
+            const latestResearchCycle = getLatestResearchCycle(currentState);
+            const researchOutput = latestResearchCycle?.output || null;
             const ux_v1 = getValue(currentState, 'ux_v1');
             const dev_output = getValue(currentState, 'dev_output');
+            const researchEval = getValue(currentState, 'research_eval');
 
             let html = renderStageOverview(currentState);
 
@@ -830,26 +840,24 @@ For deployment:
                 html += renderClarificationForm(currentState);
             }
 
-            if (research_round1) {
+            if (researchOutput) {
                 html += `
                     <div class="results-section">
-                        <h2>🔍 Research Round 1</h2>
+                        <h2>🔍 Research Cycles (${Array.isArray(researchCycles) ? researchCycles.length : 0})</h2>
+                        ${researchEval ? `
                         <div class="result-item">
+                            <h3><strong>Quality Gate</strong></h3>
                             <div class="result-content">
-                                <pre style="white-space: pre-wrap; font-size: 12px;">${JSON.stringify(research_round1, null, 2)}</pre>
+                                <p><strong>Overall Score:</strong> ${researchEval.overall_score ?? 'N/A'} / 10</p>
+                                <p><strong>Decision:</strong> ${researchEval.next_action || 'N/A'}</p>
+                                <p><strong>Iteration:</strong> ${researchEval.iteration || (latestResearchCycle?.iteration || 0)} / ${researchEval.max_rounds || 3}</p>
                             </div>
                         </div>
-                    </div>
-                `;
-            }
-
-            if (research_round2) {
-                html += `
-                    <div class="results-section">
-                        <h2>🔍 Research Round 2</h2>
+                        ` : ''}
                         <div class="result-item">
+                            <h3><strong>Latest Iteration: ${latestResearchCycle?.iteration || 1}</strong></h3>
                             <div class="result-content">
-                                <pre style="white-space: pre-wrap; font-size: 12px;">${JSON.stringify(research_round2, null, 2)}</pre>
+                                <pre style="white-space: pre-wrap; font-size: 12px;">${JSON.stringify(researchOutput, null, 2)}</pre>
                             </div>
                         </div>
                     </div>

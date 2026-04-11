@@ -2,7 +2,94 @@ import json
 from src.agents.base import BaseAgent
 from src.prompts.researcher import RESEARCH_SYSTEM_PROMPT
 from src.schemas.research import ResearchOutput
-from src.services.llm_service import call_llm_json
+from src.services.llm_service import call_llm_json_with_tools
+from src.services.research_tools import (
+  competitor_scan,
+  market_scan,
+  user_pain_scan,
+  web_search,
+)
+
+
+RESEARCH_TOOLS = [
+  {
+    "type": "function",
+    "function": {
+      "name": "web_search",
+      "description": "Run a targeted web search query for custom research needs.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Specific web search query.",
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Maximum number of source snippets to return (1-8).",
+            "minimum": 1,
+            "maximum": 8,
+          },
+        },
+        "required": ["query"],
+      },
+    },
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "market_scan",
+      "description": "Search market size, trend, and growth signals for a product category.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "product": {"type": "string", "description": "Product or market category."},
+          "region": {"type": "string", "description": "Region scope, default global."},
+          "max_results": {"type": "integer", "minimum": 1, "maximum": 8},
+        },
+        "required": ["product"],
+      },
+    },
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "competitor_scan",
+      "description": "Search direct competitors, alternatives, and positioning signals.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "product": {"type": "string", "description": "Product or problem space."},
+          "max_results": {"type": "integer", "minimum": 1, "maximum": 8},
+        },
+        "required": ["product"],
+      },
+    },
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "user_pain_scan",
+      "description": "Search user complaints, pain points, and unmet needs for a product area.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "product": {"type": "string", "description": "Product or problem space."},
+          "target_users": {"type": "string", "description": "Optional target user segment."},
+          "max_results": {"type": "integer", "minimum": 1, "maximum": 8},
+        },
+        "required": ["product"],
+      },
+    },
+  },
+]
+
+RESEARCH_TOOL_HANDLERS = {
+  "web_search": web_search,
+  "market_scan": market_scan,
+  "competitor_scan": competitor_scan,
+  "user_pain_scan": user_pain_scan,
+}
 
 
 class ResearchAgent(BaseAgent):
@@ -11,6 +98,12 @@ class ResearchAgent(BaseAgent):
     def run(self, task: dict) -> ResearchOutput:
         user_prompt = f"""
 You are a research agent. Based on this task, provide research findings in JSON format.
+
+Autonomous tool policy:
+- Decide which tools to call based on the product type and task scope.
+- Prefer market_scan for market sizing/trends, competitor_scan for landscape, and user_pain_scan for user needs.
+- Use web_search for custom deep dives when specialized tools are not enough.
+- Call 1-4 tools as needed and avoid redundant calls.
 
 Task:
 {json.dumps(task, indent=2) if isinstance(task, dict) else str(task)}
@@ -62,6 +155,11 @@ Full response structure:
 
 Return ONLY JSON, no markdown, no explanation.
 """
-        data = call_llm_json(RESEARCH_SYSTEM_PROMPT, user_prompt)
+    data = call_llm_json_with_tools(
+      RESEARCH_SYSTEM_PROMPT,
+      user_prompt,
+      tools=RESEARCH_TOOLS,
+      tool_handlers=RESEARCH_TOOL_HANDLERS,
+    )
         return ResearchOutput(**data)
     

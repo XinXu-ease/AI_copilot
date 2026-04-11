@@ -4,7 +4,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
-load_dotenv(Path(__file__).with_name(".env"))
+load_dotenv()
 
 class Settings:
     def __init__(self):
@@ -17,11 +17,11 @@ class Settings:
 
         self.LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60"))
         self.LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.2"))
-        self.LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "4000"))
-
-        # SQLite数据库配置
-        db_path = Path(__file__).parent.parent.parent / "app.db"
-        self.DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{db_path}")
+        self.LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "2000"))
+        self.HISTORY_DB_PATH = os.getenv(
+            "HISTORY_DB_PATH",
+            str(Path(__file__).resolve().parents[2] / "project_history.db"),
+        )
 
 
 settings = Settings()

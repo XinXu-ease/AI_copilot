@@ -16,8 +16,10 @@ def check_port_available(port):
     sock.close()
     return result != 0
 
-def find_available_port(start_port, end_port=start_port + 10):
+def find_available_port(start_port, end_port=None):
     """找到可用端口"""
+    if end_port is None:
+        end_port = start_port + 10
     for port in range(start_port, end_port):
         if check_port_available(port):
             return port

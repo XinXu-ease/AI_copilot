@@ -1,6 +1,7 @@
 import uuid
 import json
 import sys
+import os
 import logging
 import threading
 from typing import Any
@@ -18,17 +19,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from src.db.base import init_db
+from src.db.history_store import get_project_history, init_history_db, store_project_snapshot
 from src.schemas.state import ProjectState
 from src.schemas.brief import ProjectBrief
 from src.workflows.graph import graph
 
-# 初始化数据库
-try:
-    init_db()
-    logger.info("Database initialized successfully")
-except Exception as e:
-    logger.error(f"Failed to initialize database: {e}")
+init_history_db()
 
 app = Flask(__name__)
 
@@ -60,6 +56,7 @@ project_state_lock = threading.Lock()
 def _store_project_state(project_id: str, state: ProjectState) -> None:
     with project_state_lock:
         project_states[project_id] = state
+    store_project_snapshot(project_id, state, event_type=state.get("workflow_status", "snapshot"))
 
 
 def _get_project_state(project_id: str) -> ProjectState | None:
@@ -87,12 +84,21 @@ def _serialize_state(state: ProjectState) -> dict:
     return result
 
 
+def _serialize_history_entry(entry: dict[str, Any]) -> dict:
+    return {
+        **entry,
+        "payload": _serialize_state(entry.get("payload", {})),
+    }
+
+
 def _stage_from_phase(current_phase: str | None) -> str:
     mapping = {
         "brief_ready": "brief",
-        "research_round1_done": "research_round1",
-        "research_feedback_done": "research_round1",
-        "research_validated": "research_round2",
+        "research_in_progress": "research",
+        "research_evaluated": "research",
+        "research_round1_done": "research",
+        "research_feedback_done": "research",
+        "research_validated": "research",
         "ux_v1_done": "ux",
         "ux_feedback_done": "ux",
         "ux_validated": "ux",
@@ -249,6 +255,20 @@ def get_project(project_id):
         return jsonify({"success": False, "error": str(e)}), 400
 
 
+@app.route('/api/project/<project_id>/history', methods=['GET'])
+def get_project_history_endpoint(project_id):
+    try:
+        logger.info(f"Retrieving history for project {project_id}")
+        history = get_project_history(project_id)
+        return jsonify({
+            "success": True,
+            "history": [_serialize_history_entry(entry) for entry in history],
+        })
+    except Exception as e:
+        logger.error(f"Error retrieving history for project {project_id}: {str(e)}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
 @app.route('/api/project/<project_id>/clarification', methods=['POST', 'OPTIONS'])
 def submit_clarification(project_id):
     """Submit clarification answers."""
@@ -316,6 +336,6 @@ if __name__ == '__main__':
     logger.info("Frontend should request from: http://localhost:5000/api")
     logger.info("=" * 60)
     try:
-        app.run(debug=True, port=5000, host='0.0.0.0')
+        app.run(debug=True, port = int(os.getenv("PORT", "5000")), host='0.0.0.0')
     except Exception as e:
         logger.error(f"Failed to start server: {e}", exc_info=True)
