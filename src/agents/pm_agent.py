@@ -189,7 +189,7 @@ Output schema:
 """
         return call_llm_json(DVF_FEEDBACK_PROMPT, user_prompt)
 
-  def evaluate_research_quality(
+def evaluate_research_quality(
     self,
     brief: ProjectBrief,
     research_output: dict,
