@@ -155,11 +155,11 @@ Full response structure:
 
 Return ONLY JSON, no markdown, no explanation.
 """
-    data = call_llm_json_with_tools(
-      RESEARCH_SYSTEM_PROMPT,
-      user_prompt,
-      tools=RESEARCH_TOOLS,
-      tool_handlers=RESEARCH_TOOL_HANDLERS,
-    )
+        data = call_llm_json_with_tools(
+            RESEARCH_SYSTEM_PROMPT,
+            user_prompt,
+            tools=RESEARCH_TOOLS,
+            tool_handlers=RESEARCH_TOOL_HANDLERS,
+        )
         return ResearchOutput(**data)
     
