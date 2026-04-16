@@ -189,17 +189,17 @@ Output schema:
 """
         return call_llm_json(DVF_FEEDBACK_PROMPT, user_prompt)
 
-def evaluate_research_quality(
-    self,
-    brief: ProjectBrief,
-    research_output: dict,
-    *,
-    iteration: int,
-    max_rounds: int = 3,
-    pass_threshold: float = 7.0,
-  ) -> dict:
-    """Score research quality and decide whether to iterate or proceed."""
-    user_prompt = f"""
+    def evaluate_research_quality(
+        self,
+        brief: ProjectBrief,
+        research_output: dict,
+        *,
+        iteration: int,
+        max_rounds: int = 3,
+        pass_threshold: float = 7.0,
+    ) -> dict:
+        """Score research quality and decide whether to iterate or proceed."""
+        user_prompt = f"""
 Project brief:
 {json.dumps(brief.model_dump(), indent=2)}
 
@@ -231,29 +231,29 @@ Output schema:
   "confidence": "low|medium|high"
 }}
 """
-    result = call_llm_json(RESEARCH_EVALUATOR_PROMPT, user_prompt)
+        result = call_llm_json(RESEARCH_EVALUATOR_PROMPT, user_prompt)
 
-    overall_score = float(result.get("overall_score", 0.0) or 0.0)
-    dimension_scores = result.get("dimension_scores", {}) or {}
-    evidence_score = float(dimension_scores.get("evidence_quality", 0.0) or 0.0)
+        overall_score = float(result.get("overall_score", 0.0) or 0.0)
+        dimension_scores = result.get("dimension_scores", {}) or {}
+        evidence_score = float(dimension_scores.get("evidence_quality", 0.0) or 0.0)
 
-    passes_gate = overall_score >= pass_threshold and evidence_score >= 6.5
-    if passes_gate:
-      next_action = "proceed_to_ux"
-    elif iteration < max_rounds:
-      next_action = "revise_research"
-    else:
-      next_action = "force_proceed_with_risk"
+        passes_gate = overall_score >= pass_threshold and evidence_score >= 6.5
+        if passes_gate:
+            next_action = "proceed_to_ux"
+        elif iteration < max_rounds:
+            next_action = "revise_research"
+        else:
+            next_action = "force_proceed_with_risk"
 
-    return {
-      **result,
-      "overall_score": round(overall_score, 2),
-      "pass_threshold": pass_threshold,
-      "iteration": iteration,
-      "max_rounds": max_rounds,
-      "passes_gate": passes_gate,
-      "next_action": next_action,
-    }
+        return {
+            **result,
+            "overall_score": round(overall_score, 2),
+            "pass_threshold": pass_threshold,
+            "iteration": iteration,
+            "max_rounds": max_rounds,
+            "passes_gate": passes_gate,
+            "next_action": next_action,
+        }
 
     def run(self, raw_idea: str, history: list[str] | None = None) -> ProjectBrief:
         return self.build_brief(raw_idea=raw_idea, history=history)
