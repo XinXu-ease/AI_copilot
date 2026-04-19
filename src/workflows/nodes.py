@@ -1,6 +1,7 @@
 import time
 
 from src.schemas.state import ProjectState, FeedbackBundle, DecisionLog
+from src.schemas.pm import ResearchEvaluation, DVFAssessment
 from src.agents.pm_agent import PMAgent
 from src.agents.researcher_agent import ResearchAgent
 from src.agents.ux_agent import UXAgent
@@ -33,13 +34,32 @@ def _get_latest_research_cycle(state: ProjectState) -> dict | None:
     return max(cycles, key=lambda item: int(item.get("iteration", 0) or 0))
 
 
-def _get_latest_research_output(state: ProjectState) -> dict:
-    latest_cycle = _get_latest_research_cycle(state)
-    if latest_cycle:
-        output = latest_cycle.get("output", {})
-        if isinstance(output, dict):
-            return output
-    return {}
+
+
+
+
+def _get_latest_research_eval(state: ProjectState) -> dict:
+    evaluation = state.get("research_eval", {}) or {}
+    if hasattr(evaluation, "model_dump"):
+        return evaluation.model_dump()
+    return evaluation if isinstance(evaluation, dict) else {}
+
+
+def _build_dvf_assessments(research_feedback: dict) -> list[DVFAssessment]:
+    assessments = []
+    for item in research_feedback.get("dvf_assessments", []) or []:
+        assessments.append(
+            DVFAssessment(
+                dimension=item.get("dimension", ""),
+                statement=item.get("statement", ""),
+                confidence=item.get("confidence", "medium"),
+                evidence=item.get("evidence", ""),
+            )
+        )
+    return assessments
+
+
+
 
 
 def intake_node(state: ProjectState) -> dict:
@@ -49,23 +69,20 @@ def intake_node(state: ProjectState) -> dict:
         raw_idea=brief_obj.idea_summary if brief_obj else "",
         history=state.get("clarification_answers", []),
     )
-    
-    # If user has already answered clarification questions, move forward
+
     clarification_questions = []
     if not state.get("clarification_answers") and brief.missing_info:
-        # First time asking - prioritize top 5 most critical questions
         clarification_questions = pm.prioritize_clarification_questions(brief)
-    
+
     return _with_node_timing(state, "intake", {
         "brief": brief,
         "clarification_questions": clarification_questions,
-        "current_phase": "brief_ready"
+        "current_phase": "brief_ready",
     }, started_at)
 
 
 def clarification_router(state: ProjectState) -> str:
     clarification_questions = state.get("clarification_questions", [])
-    # If there are clarification questions, we need clarification
     if clarification_questions and len(clarification_questions) > 0:
         return "need_clarification"
     return "ready_for_research"
@@ -76,18 +93,27 @@ def research_cycle_node(state: ProjectState) -> dict:
     brief = state.get("brief")
     existing_cycles = list(state.get("research_cycles", []) or [])
     iteration = len(existing_cycles) + 1
-    task = pm.generate_research_task(brief)
+
+    task = pm.generate_research_task(
+        brief,
+        iteration=iteration,
+        previous_research_output=state.get("research_output"),
+        research_eval=_get_latest_research_eval(state),
+        research_feedback=state.get("research_feedback", {}),
+    )
     output = research_agent.run(task=task)
     output_dict = output.model_dump()
 
     cycle_item = {
         "iteration": iteration,
+        "task": task,
         "output": output_dict,
     }
 
     payload = {
         "research_cycles": [*existing_cycles, cycle_item],
         "research_iteration": iteration,
+        "research_output": output_dict,  # ✅ Elevate to top-level
         "current_phase": "research_in_progress",
     }
 
@@ -97,7 +123,7 @@ def research_cycle_node(state: ProjectState) -> dict:
 def research_evaluator_node(state: ProjectState) -> dict:
     started_at = time.perf_counter()
     brief = state.get("brief")
-    research_output = _get_latest_research_output(state)
+    research_output = state.get("research_output", {})  # ✅ Now from top-level
     iteration = int(state.get("research_iteration", 1) or 1)
 
     evaluation = pm.evaluate_research_quality(
@@ -105,59 +131,73 @@ def research_evaluator_node(state: ProjectState) -> dict:
         research_output=research_output,
         iteration=iteration,
     )
+    research_feedback = pm.generate_research_feedback(
+        brief=brief,
+        research_output=research_output,
+    )
+    dvf_assessments = _build_dvf_assessments(research_feedback)
 
-    dvf_feedback = pm.generate_dvf_feedback(brief, research_output)
-    dvf_summary = [
-        f"Desirability (Score {dvf_feedback['desirability']['score']}/10): {dvf_feedback['desirability']['evidence']}",
-        f"Viability (Score {dvf_feedback['viability']['score']}/10): {dvf_feedback['viability']['evidence']}",
-        f"Feasibility (Score {dvf_feedback['feasibility']['score']}/10): {dvf_feedback['feasibility']['evidence']}",
-        f"Overall: {dvf_feedback['overall_assessment']}",
-    ]
+    research_eval = ResearchEvaluation(
+        passes_gate=evaluation.get("passes_gate", False),
+        overall_score=float(evaluation.get("overall_score", 0)),
+        next_action=evaluation.get("next_action", "iterate_research"),
+        evidence_quality=float(evaluation.get("evidence_quality", 0)),
+        coverage_score=float(evaluation.get("coverage_score", 0)),
+        consistency_score=float(evaluation.get("consistency_score", 0)),
+        actionability_score=float(evaluation.get("actionability_score", 0)),
+        risk_awareness_score=float(evaluation.get("risk_awareness_score", 0)),
+        strengths=evaluation.get("strengths", []),
+        fail_reasons=evaluation.get("fail_reasons", []),
+        targeted_revision_actions=evaluation.get("targeted_revision_actions", []),
+        risks_identified=evaluation.get("fail_reasons", []),
+        assumptions_needing_validation=research_output.get("open_questions", []),
+        dvf_assessments=dvf_assessments,
+        iteration=iteration,
+        max_rounds=evaluation.get("max_rounds"),
+    )
 
-    existing_decisions = state.get("decisions_log", [])
+    existing_decisions = state.get("decisions_log", []) or []
     decisions = list(existing_decisions)
-    if evaluation.get("passes_gate"):
+    dvf_summary = " / ".join([f"{a.dimension}: {a.confidence}" for a in dvf_assessments])
+
+    if research_eval.passes_gate:
         decisions.append(
             DecisionLog(
                 phase="research",
                 decision="Proceed to UX design",
-                rationale=f"Research quality gate passed ({evaluation.get('overall_score')}/10).",
+                rationale=f"Research quality gate passed ({research_eval.overall_score}/10). DVF: {dvf_summary}.",
             )
         )
-    elif evaluation.get("next_action") == "force_proceed_with_risk":
+    elif research_eval.next_action == "force_proceed_with_risk":
         decisions.append(
             DecisionLog(
                 phase="research",
                 decision="Proceed with risk",
-                rationale=(
-                    f"Reached max research rounds ({evaluation.get('max_rounds')}) "
-                    f"with score {evaluation.get('overall_score')}/10."
-                ),
+                rationale=f"Reached max research rounds ({iteration}). DVF: {dvf_summary}.",
             )
         )
 
-    insights = research_output.get("insights", []) if isinstance(research_output, dict) else []
-    opportunities_data = research_output.get("opportunities", []) if isinstance(research_output, dict) else []
-    validated_insights = [item.get("statement", "") for item in insights if isinstance(item, dict) and item.get("statement")]
-    opportunities = [item.get("title", "") for item in opportunities_data if isinstance(item, dict) and item.get("title")]
+    # ✅ Pre-build research_context: insights + opportunities + risks
+    research_context = {
+        "insights": research_output.get("insights", []),
+        "opportunities": research_output.get("opportunities", []),
+        "risks": research_eval.risks_identified if research_eval.risks_identified else [],
+    }
 
+    research_eval_dict = research_eval.model_dump()
     payload = {
-        "research_eval": evaluation,
-        "dvf_summary": dvf_summary,
-        "validated_insights": validated_insights,
-        "opportunities": opportunities,
+        "research_eval": research_eval_dict,
+        "research_feedback": research_feedback,
+        "research_context": research_context,  # ✅ Pre-built for downstream
         "decisions_log": decisions,
         "current_phase": "research_evaluated",
     }
-
-    if evaluation.get("next_action") == "force_proceed_with_risk":
-        payload["risk_flag"] = "research_quality_below_threshold"
 
     return _with_node_timing(state, "research_evaluator", payload, started_at)
 
 
 def research_evaluator_router(state: ProjectState) -> str:
-    evaluation = state.get("research_eval", {}) or {}
+    evaluation = _get_latest_research_eval(state)
     next_action = evaluation.get("next_action")
 
     if next_action == "proceed_to_ux":
@@ -170,14 +210,11 @@ def research_evaluator_router(state: ProjectState) -> str:
 def ux_design_node(state: ProjectState) -> dict:
     started_at = time.perf_counter()
     brief = state.get("brief")
-    dvf_summary = state.get("dvf_summary", [])
+    research_output = state.get("research_output", {})  # ✅ From top-level
 
-    research_output = _get_latest_research_output(state)
-    
     ux = ux_agent.run(
         brief=brief.model_dump() if brief else {},
         research_output=research_output,
-        dvf_summary=dvf_summary,
     )
     return _with_node_timing(
         state,
@@ -188,34 +225,53 @@ def ux_design_node(state: ProjectState) -> dict:
 
 
 def ux_feedback_node(state: ProjectState) -> dict:
-    """Generate structured feedback on UX design."""
+    """Generate structured feedback on UX design with DVF evaluation."""
     started_at = time.perf_counter()
     ux_v1 = state.get("ux_v1")
     brief = state.get("brief")
-    
+    research_context = state.get("research_context", {})  # ✅ Pre-built from research_evaluator
+
     ux_output = ux_v1.model_dump() if ux_v1 else {}
-    research_output = _get_latest_research_output(state)
-    
+
     feedback_dict = pm.generate_ux_feedback(
         brief=brief,
-        research_output=research_output,
-        ux_output=ux_output
+        research_output=research_context,
+        ux_output=ux_output,
     )
-    
-    # Convert structured feedback into FeedbackBundle format
+
+    dvf_assessments = None
+    if feedback_dict.get("dvf_assessments"):
+        dvf_assessments = [
+            DVFAssessment(
+                dimension=a.get("dimension", ""),
+                statement=a.get("statement", ""),
+                confidence=a.get("confidence", "medium"),
+                evidence=a.get("evidence", ""),
+            )
+            for a in feedback_dict.get("dvf_assessments", [])
+        ]
+
     feedback = [
         FeedbackBundle(
             source_agent="pm",
-            comments=feedback_dict.get("actionable_revisions", []) + 
-                    feedback_dict.get("feature_priority_feedback", []),
-            cross_team_feedback={"research": feedback_dict.get("cross_team_feedback", {}).get("research_comments", []),
-                               "developer": feedback_dict.get("cross_team_feedback", {}).get("developer_comments", [])}
+            comments=feedback_dict.get("actionable_revisions", []) +
+            feedback_dict.get("feature_priority_feedback", []),
+            cross_team_feedback={
+                "research": feedback_dict.get("cross_team_feedback", {}).get("research_comments", []),
+                "developer": feedback_dict.get("cross_team_feedback", {}).get("developer_comments", []),
+            },
+            dvf_assessments=dvf_assessments,
         ),
     ]
+
+    payload = {
+        "ux_feedback": feedback,
+        "current_phase": "ux_feedback_done",
+    }
     return _with_node_timing(
         state,
         "ux_feedback",
-        {"ux_feedback": feedback, "current_phase": "ux_feedback_done"},
+        payload,
         started_at,
     )
 
@@ -223,14 +279,20 @@ def ux_feedback_node(state: ProjectState) -> dict:
 def ux_revision_node(state: ProjectState) -> dict:
     started_at = time.perf_counter()
     brief = state.get("brief")
-    dvf_summary = state.get("dvf_summary", [])
+    research_output = state.get("research_output", {})  # ✅ From top-level
+    ux_feedback = state.get("ux_feedback", []) or []
 
-    research_output = _get_latest_research_output(state)
-    
+    feedback_context = ""
+    if ux_feedback:
+        latest_feedback = ux_feedback[-1] if isinstance(ux_feedback, list) else ux_feedback
+        comments = latest_feedback.get("comments", []) if isinstance(latest_feedback, dict) else latest_feedback.comments
+        if comments:
+            feedback_context = "\nPM Feedback:\n" + "\n".join([f"- {c}" for c in comments[:5]])
+
     ux = ux_agent.run(
         brief=brief.model_dump() if brief else {},
         research_output=research_output,
-        dvf_summary=dvf_summary,
+        feedback_context=feedback_context,
     )
     return _with_node_timing(
         state,
@@ -245,18 +307,20 @@ def developer_node(state: ProjectState) -> dict:
     ux_v2 = state.get("ux_v2")
     ux_v1 = state.get("ux_v1")
     brief = state.get("brief")
-    existing_decisions = state.get("decisions_log", [])
-    
+    existing_decisions = state.get("decisions_log", []) or []
+
     ux_payload = (ux_v2 or ux_v1).model_dump() if (ux_v2 or ux_v1) else {}
+
     dev = developer_agent.run(
         brief=brief.model_dump() if brief else {},
         ux_output=ux_payload,
+        research_output=state.get("research_output", {}),  # ✅ From top-level
     )
     decisions = existing_decisions + [
         DecisionLog(
             phase="development",
             decision="Generated MVP implementation plan",
-            rationale="UX structure is sufficient for scoped MVP planning."
+            rationale="UX structure is sufficient for scoped MVP planning.",
         )
     ]
     return _with_node_timing(state, "developer", {

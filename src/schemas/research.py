@@ -23,6 +23,7 @@ class OpportunityItem(BaseModel):
 
 
 class ResearchOutput(BaseModel):
+    """Output from Research Agent"""
     market_summary: List[str] = []
     competitors: List[CompetitorItem] = []
     user_pain_points: List[str] = []

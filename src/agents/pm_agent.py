@@ -45,14 +45,44 @@ Output schema:
         data = call_llm_json(PM_SYSTEM_PROMPT, user_prompt)
         return ProjectBrief(**data)
 
-    def generate_research_task(self, brief: ProjectBrief) -> dict:
+    def generate_research_task(
+        self,
+        brief: ProjectBrief,
+        *,
+        iteration: int = 1,
+        previous_research_output: dict | None = None,
+        research_eval: dict | None = None,
+        research_feedback: dict | None = None,
+    ) -> dict:
         """Use LLM to generate a customized research task based on the brief."""
+        previous_context = ""
+        if iteration > 1:
+            previous_context = f"""
+Previous research output:
+{json.dumps(previous_research_output or {}, indent=2)}
+
+Previous PM quality-gate evaluation:
+{json.dumps(research_eval or {}, indent=2)}
+
+Previous PM research feedback:
+{json.dumps(research_feedback or {}, indent=2)}
+
+Use the prior evaluation and feedback to create a focused follow-up research task.
+Avoid repeating already-covered areas unless the feedback says the evidence is weak.
+"""
+
         user_prompt = f"""
 Project brief:
 {json.dumps(brief.model_dump(), indent=2)}
 
+Research iteration: {iteration}
+
+{previous_context}
+
 Task:
 Generate a detailed research task that will help validate the idea across DVF dimensions (Desirability, Viability, Feasibility).
+For iteration 1, base the task on the brief and include at least one targeted web_search need.
+For later iterations, base the task on the prior research_eval and research_feedback.
 
 Output schema:
 {{
@@ -63,19 +93,25 @@ Output schema:
   "viability_focus": "string",
   "feasibility_focus": "string",
   "key_questions": ["string"],
-  "constraints": ["string"]
+  "web_search_queries": ["string"],
+  "constraints": ["string"],
+  "prior_feedback_used": ["string"]
 }}
 """
         return call_llm_json(PM_SYSTEM_PROMPT, user_prompt)
 
     def generate_research_feedback(self, brief: ProjectBrief, research_output: dict) -> dict:
         """Generate structured feedback on research findings for all teams."""
+        dvf_feedback = self.generate_dvf_feedback(brief, research_output)
         user_prompt = f"""
 Project brief:
 {json.dumps(brief.model_dump(), indent=2)}
 
 Research output:
 {json.dumps(research_output, indent=2)}
+
+DVF reliability assessment:
+{json.dumps(dvf_feedback, indent=2)}
 
 Task:
 Evaluate this research through DVF and business lenses. Provide structured feedback for PM, UX, and Developer teams on:
@@ -84,28 +120,64 @@ Evaluate this research through DVF and business lenses. Provide structured feedb
 3. Evidence quality and assumptions vs. facts
 4. Cross-team implications
 5. What's needed for next phases
+
+Return the DVF reliability assessment under dvf_assessments using the same statement/confidence/evidence structure.
 """
-        return call_llm_json(RESEARCH_FEEDBACK_PROMPT, user_prompt)
+        feedback = call_llm_json(RESEARCH_FEEDBACK_PROMPT, user_prompt)
+        feedback["dvf_assessments"] = dvf_feedback.get("dvf_assessments", [])
+        return feedback
 
     def generate_ux_feedback(self, brief: ProjectBrief, research_output: dict, ux_output: dict) -> dict:
-        """Generate structured feedback on UX deliverables for all teams."""
+        """Generate structured feedback on UX v1 deliverables with DVF assessment based on research insights."""
+        # ✅ Extract insights, opportunities, and risks from research context
+        insights = research_output.get("insights", [])
+        opportunities = research_output.get("opportunities", [])
+        risks = research_output.get("risks", [])
+        
+        insights_text = "\n".join([f"- {i.get('statement', '')}" for i in insights[:5]]) if insights else "No specific insights"
+        opportunities_text = "\n".join([f"- {o.get('title', '')}: {o.get('rationale', '')}" for o in opportunities[:5]]) if opportunities else "No opportunities identified"
+        risks_text = "\n".join([f"- {r}" for r in risks[:3]]) if risks else "No risks flagged"
+        
         user_prompt = f"""
 Project brief:
 {json.dumps(brief.model_dump(), indent=2)}
 
+Research Insights:
+{insights_text}
+
+Market Opportunities:
+{opportunities_text}
+
+Identified Risks:
+{risks_text}
+
 Research findings:
 {json.dumps(research_output, indent=2)}
 
-UX output:
+UX v1 design output:
 {json.dumps(ux_output, indent=2)}
 
 Task:
-Evaluate this UX design through DVF and business lenses. Provide structured feedback for PM, Research, and Developer teams on:
-1. How well UX maps to research and business goals
-2. DVF coverage and implications
-3. Scope and feasibility concerns
-4. Cross-team dependencies and alignment
-5. Feature prioritization from business perspective
+Evaluate this UX v1 design against the research findings through DVF dimensions and business lenses.
+Provide specific, actionable feedback for PM, Research, and Developer teams.
+
+Your response MUST include:
+- actionable_revisions: [list of specific changes to improve UX v1]
+- feature_priority_feedback: [priority and reasoning for each feature]
+- cross_team_feedback: {{
+    "research_comments": [how well UX v1 addresses research findings],
+    "developer_comments": [technical feasibility concerns with UX v1]
+  }}
+- dvf_assessments: [
+    {{
+      "dimension": "desirability|viability|feasibility",
+      "statement": "specific assessment of how UX v1 addresses this dimension based on research",
+      "evidence": "concrete examples from UX v1 that support/contradict this assessment",
+      "confidence": "high|medium|low"
+    }}
+  ]
+
+Return JSON only.
 """
         return call_llm_json(UX_FEEDBACK_PROMPT, user_prompt)
 
@@ -166,24 +238,26 @@ Analyze the research findings from DVF perspective and provide structured feedba
 
 Output schema:
 {{
-  "desirability": {{
-    "score": "1-10",
-    "evidence": "string",
-    "risks": ["string"],
-    "recommendations": ["string"]
-  }},
-  "viability": {{
-    "score": "1-10",
-    "evidence": "string",
-    "risks": ["string"],
-    "recommendations": ["string"]
-  }},
-  "feasibility": {{
-    "score": "1-10",
-    "evidence": "string",
-    "risks": ["string"],
-    "recommendations": ["string"]
-  }},
+  "dvf_assessments": [
+    {{
+      "dimension": "desirability",
+      "statement": "string",
+      "confidence": "high|medium|low",
+      "evidence": "string"
+    }},
+    {{
+      "dimension": "viability",
+      "statement": "string",
+      "confidence": "high|medium|low",
+      "evidence": "string"
+    }},
+    {{
+      "dimension": "feasibility",
+      "statement": "string",
+      "confidence": "high|medium|low",
+      "evidence": "string"
+    }}
+  ],
   "overall_assessment": "string"
 }}
 """
@@ -252,6 +326,11 @@ Output schema:
             "iteration": iteration,
             "max_rounds": max_rounds,
             "passes_gate": passes_gate,
+            "evidence_quality": evidence_score,
+            "coverage_score": float(dimension_scores.get("coverage", 0.0) or 0.0),
+            "consistency_score": float(dimension_scores.get("consistency", 0.0) or 0.0),
+            "actionability_score": float(dimension_scores.get("actionability", 0.0) or 0.0),
+            "risk_awareness_score": float(dimension_scores.get("risk_awareness", 0.0) or 0.0),
             "next_action": next_action,
         }
 

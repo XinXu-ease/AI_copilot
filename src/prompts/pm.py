@@ -84,6 +84,7 @@ Your feedback should help the research team understand:
 3. Evidence quality (are claims supported?)
 4. Alignment with brief priorities
 5. What's missing for UX and Developer teams to execute
+6. Current DVF reliability, expressed as statement / confidence / evidence
 
 Generate structured feedback for THREE perspectives:
 - PM perspective: Does this answer the critical business questions?
@@ -101,6 +102,14 @@ Return schema:
     "ux_comments": ["string"],
     "developer_comments": ["string"]
   },
+  "dvf_assessments": [
+    {
+      "dimension": "desirability|viability|feasibility",
+      "statement": "string",
+      "confidence": "high|medium|low",
+      "evidence": "string"
+    }
+  ],
   "actionable_next_steps": ["string"],
   "priority_for_round2": ["string"]
 }
@@ -171,10 +180,9 @@ Your task is to evaluate research findings and provide structured feedback on:
 - Feasibility: Can we technically build this? Are resources/constraints manageable?
 
 For each dimension, provide:
-1. A score (1-10)
-2. Evidence from the research
-3. Key risks
-4. Actionable recommendations
+1. statement: What the current research suggests for this DVF dimension
+2. confidence: How reliable that conclusion is right now (high, medium, or low)
+3. evidence: The specific research signals that justify the confidence level
 
 Be critical but constructive. Identify gaps between assumptions and research findings.
 Return strict JSON only.
